@@ -1,16 +1,14 @@
 # GPU Operator Self-Certification
 
-A self-certification test suite for ISVs to validate NVIDIA GPU Operator compatibility on their platforms. Runs as a Kubernetes Job and outputs structured JSON results. The latest image (nvcr.io/ea-cnt/nv_only/gpu-operator-certification:latest) can be provided for users to use for self certification.
+A self-certification test suite for ISVs to validate NVIDIA GPU Operator compatibility on their platforms. Runs as a Kubernetes Job and outputs structured JSON results. The `gpu-operator-certification` binary ships in the GPU Operator image (`nvcr.io/nvidia/gpu-operator`), and this chart runs it from there.
 
 ## Quick Start
 
 ```bash
-# Build and push a multi-arch image (linux/amd64, linux/arm64)
-make docker-build IMAGE_TAG=latest
-
-# Deploy (GPU Operator must be installed)
-helm install gpu-operator-certification deploy/helm/gpu-operator-certification \
-  --namespace gpu-operator
+# Deploy (GPU Operator must be installed); match image.tag to the installed operator version
+helm install gpu-operator-certification deployments/gpu-operator-certification \
+  --namespace gpu-operator \
+  --set image.tag=<gpu-operator-version>
 
 # View results
 kubectl logs job/gpu-operator-certification -n gpu-operator
@@ -34,6 +32,8 @@ testSets:
 | `namespace` | `gpu-operator` | GPU Operator namespace |
 | `timeout` | `15m` | Timeout for readiness checks |
 | `testSets` | `["all"]` | TestSets to run (use `!` prefix to exclude) |
+| `image.repository` | `nvcr.io/nvidia/gpu-operator` | GPU Operator image that contains `gpu-operator-certification` |
+| `image.tag` | chart `appVersion` | GPU Operator image tag |
 
 ## Test Sets
 
@@ -68,7 +68,7 @@ testSets:
 
 ## Adding Tests
 
-Tests are registered via `init()` in `internal/testsuite/register.go`. Each `TestSet` groups reusable `Test` primitives:
+Tests are registered via `init()` in `internal/certification/testsuite/register.go`. Each `TestSet` groups reusable `Test` primitives:
 
 ```go
 // Reusable test primitives
@@ -102,25 +102,27 @@ type Test interface {
 
 ## Development
 
-```bash
-go build ./...                                                # Build
-go test ./...                                                 # Test
-make docker-build IMAGE_TAG=dev                               # linux/amd64 + linux/arm64, pushes to the registry
-make docker-buildx IMAGE_TAG=dev                              # Same as docker-build (forces multi-arch push)
-make docker-build BUILD_MULTI_ARCH_IMAGES=false IMAGE_TAG=dev # Image for the host architecture
-make docker-build docker-push BUILD_MULTI_ARCH_IMAGES=false IMAGE_TAG=dev # Host-arch build, then docker push
-```
+Run from the root of the GPU Operator repository:
 
-`BUILD_MULTI_ARCH_IMAGES` defaults to `true`. Multi-arch images are pushed during build because a manifest list cannot be loaded into the local Docker daemon. `make docker-buildx` is equivalent to `make docker-build BUILD_MULTI_ARCH_IMAGES=true PUSH_ON_BUILD=true`.
+```bash
+make cmd-gpu-operator-certification   # Build the binary
+go test ./internal/certification/...  # Test
+make build-image                      # GPU Operator image, which includes gpu-operator-certification
+```
 
 ## Project Structure
 
 ```
-internal/
-├── certification/   # Framework (runner, config, registry)
-├── helpers/         # Shared K8s utilities
-└── testsuite/
-    ├── register.go  # TestSet registrations
-    ├── baseline/    # Default settings tests
-    └── clusterpolicy/ # ClusterPolicy mutation tests
+cmd/gpu-operator-certification/          # Entry point
+internal/certification/                  # Framework (runner, config, registry)
+├── k8s/                                 # Shared K8s utilities
+├── environment/                         # Cluster environment collectors
+├── reporting/                           # JSON and HTML report output
+├── testsuite/
+│   ├── register.go                      # TestSet registrations
+│   ├── baseline/                        # Default settings tests
+│   └── clusterpolicy/                   # ClusterPolicy mutation tests
+└── utils/time/                          # Time helpers
+deployments/gpu-operator-certification/  # Helm chart
+hack/download-certification-results.sh   # Fetch results from the results ConfigMap
 ```
