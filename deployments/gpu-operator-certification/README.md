@@ -19,21 +19,32 @@ kubectl logs job/gpu-operator-certification -n gpu-operator
 Configure via Helm values:
 
 ```yaml
-namespace: gpu-operator
-timeout: "15m"
+testTimeout: "15m"
 testSets:
   - "all"              # Run all TestSets
   # - "!TS1003"        # Exclude specific sets with "!"
   # - "TS1000"         # Or list specific sets to run
+targetDriver:          # TS1003 is skipped unless all three are set
+  repository: "nvcr.io/nvidia"
+  image: "driver"
+  version: "580.126.16"
 ```
+
+The GPU Operator namespace is not a value. The Job runs in the Helm release namespace (`--namespace`), which it passes to the binary through the `NAMESPACE` environment variable.
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `namespace` | `gpu-operator` | GPU Operator namespace |
-| `timeout` | `15m` | Timeout for readiness checks |
-| `testSets` | `["all"]` | TestSets to run (use `!` prefix to exclude) |
+| `testTimeout` | `15m` | Timeout for readiness checks, as a Go duration |
+| `testSets` | `["all"]` | TestSets to run (use `!` prefix to exclude, `[]` to run nothing) |
+| `testWorkloadImage` | `nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda12.5.0-ubuntu22.04` | Image for the GPU workload validation pod (TS1000) |
+| `targetDriver.repository` | `""` | Driver image repository to update to in TS1003 |
+| `targetDriver.image` | `""` | Driver image name to update to in TS1003 |
+| `targetDriver.version` | `""` | Driver version to update to in TS1003; TS1003 is skipped unless all three `targetDriver` fields are set |
+| `rdmaBaseImage` | `nvcr.io/nvidia/cuda:13.1.1-base-ubuntu24.04` | Base CUDA image for TS1006/TS1007 RDMA test pods; its glibc must be at least as new as the host MOFED libraries |
 | `image.repository` | `nvcr.io/nvidia/gpu-operator` | GPU Operator image that contains `gpu-operator-certification` |
 | `image.tag` | chart `appVersion` | GPU Operator image tag |
+| `image.pullPolicy` | `Always` | Pull policy for the certification image |
+| `imagePullSecrets` | `[]` | Image pull secrets for the certification Job pod |
 
 ## Test Sets
 
